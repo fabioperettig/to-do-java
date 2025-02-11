@@ -22,11 +22,35 @@ public class TaskServices {
         readTasksFromFile(INCOMPLETE_TASKS_FILE);
     }
 
+    private List<Task> loadTasksFromFile(String fileName) {
+        List<Task> tasks = new ArrayList<>();
+        File file = new File(fileName);
+
+        try {
+            if (!file.exists()) {
+                file.createNewFile();
+            }
+
+            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    // Aqui precisamos de uma forma de reconstruir as tarefas a partir do arquivo.
+                    tasks.add(new Task(line, Task.Difficulty.EASY)); // Ajuste a lógica de conversão
+                }
+            }
+        } catch (IOException e) {
+            System.out.println("Erro ao carregar tarefas: " + e.getMessage());
+        }
+
+        return tasks;
+    }
+
     //concluir uma task
     public void completeTask(String title) {
+        List<Task> tasks = loadTasksFromFile(INCOMPLETE_TASKS_FILE);
         Task completedTask = null;
 
-        for (Task task : myTasks) {
+        for (Task task : tasks) {
             if (task.getTitle().equalsIgnoreCase(title)) {
                 completedTask = task;
                 break;
@@ -34,11 +58,11 @@ public class TaskServices {
         }
 
         if (completedTask != null) {
-            myTasks.remove(completedTask);
+            tasks.remove(completedTask);
             completedTask.setStats(Task.Stats.FEITA);
             moveTaskToCompleteFile(completedTask);
-            System.out.println( completedTask.getTitle() + " concluído.");
-
+            rewriteTasksFile(tasks, INCOMPLETE_TASKS_FILE);
+            System.out.println("Tarefa '" + completedTask.getTitle() + "' concluída.");
         } else {
             System.out.println("Tarefa não foi encontrada.");
         }
@@ -46,7 +70,7 @@ public class TaskServices {
 
     //listar tasks concluídas
     public void listCompletedTasks() {
-        System.out.println("tarefas concluídas:");
+        System.out.println("Tarefas concluídas:");
         readTasksFromFile(COMPLETED_TASKS_FILE);
     }
 
@@ -63,10 +87,28 @@ public class TaskServices {
 
     //ler tasks de um arquivo
     private void readTasksFromFile(String fileName) {
+        File file = new File(fileName);
+
+        if (!file.exists()) {
+            try {
+                file.createNewFile();
+            } catch (IOException e) {
+                System.out.println("Erro ao criar o arquivo: " + e.getMessage());
+                return;
+            }
+        }
+
         try (BufferedReader reader = new BufferedReader(new FileReader(fileName))) {
             String line;
+            boolean isEmpty = true;
+
             while ((line = reader.readLine()) != null) {
                 System.out.println(line);
+                isEmpty = false;
+            }
+
+            if (isEmpty) {
+                System.out.println("Nenhuma tarefa encontrada.");
             }
 
         } catch (IOException e) {
@@ -77,34 +119,73 @@ public class TaskServices {
     //mover task concluida para o .txt de concluidas
     private void moveTaskToCompleteFile(Task task) {
         saveTaskToFile(task, COMPLETED_TASKS_FILE);
-        removeTaskFromFile(task, INCOMPLETE_TASKS_FILE);
+        removeTaskFromFile(task.getTitle(), INCOMPLETE_TASKS_FILE);
     }
 
     //remover task do .txt de incompletas
-    private void removeTaskFromFile (Task task, String fileName) {
-        try {
-            File inputFile = new File(fileName);
-            File tempFile = new File("temp.txt");
+    private void removeTaskFromFile(String title, String fileName) {
+        File inputFile = new File(fileName);
+        File tempFile = new File("temp.txt");
 
-            BufferedReader reader = new BufferedReader(new FileReader(inputFile));
-            BufferedWriter writer =  new BufferedWriter(new FileWriter(tempFile));
+        try (BufferedReader reader = new BufferedReader(new FileReader(inputFile));
+             BufferedWriter writer = new BufferedWriter(new FileWriter(tempFile))) {
 
             String line;
+            boolean removed = false;
+
             while ((line = reader.readLine()) != null) {
-                if (!line.startsWith(task.getTitle())) {
+                if (!line.equalsIgnoreCase(title)) {
                     writer.write(line);
                     writer.newLine();
+                } else {
+                    removed = true;
                 }
             }
 
-            reader.close();
-            writer.close();
-
-            if (inputFile.delete()) {
-                tempFile.renameTo(inputFile);
+            if (!removed) {
+                System.out.println("Tarefa não encontrada.");
             }
+
         } catch (IOException e) {
             System.out.println("Erro ao remover a tarefa: " + e.getMessage());
         }
+
+        if (inputFile.delete()) {
+            tempFile.renameTo(inputFile);
+        }
     }
+
+    public void editTask(String oldTitle, String newTitle, Task.Difficulty newDifficulty) {
+        List<Task> tasks = loadTasksFromFile(INCOMPLETE_TASKS_FILE);
+        boolean found = false;
+
+        for (Task task : tasks) {
+            if (task.getTitle().equalsIgnoreCase(oldTitle)) {
+                task.setTitle(newTitle);
+                task.setDifficulty(newDifficulty);
+                found = true;
+                break;
+            }
+        }
+
+        if (found) {
+            rewriteTasksFile(tasks, INCOMPLETE_TASKS_FILE);
+            System.out.println("Tarefa atualizada com sucesso!");
+        } else {
+            System.out.println("Tarefa não encontrada.");
+        }
+    }
+
+    private void rewriteTasksFile(List<Task> tasks, String fileName) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(fileName, false))) {
+            for (Task task : tasks) {
+                writer.write(task.toString());
+                writer.newLine();
+            }
+        } catch (IOException e) {
+            System.out.println("Erro ao atualizar o arquivo: " + e.getMessage());
+        }
+    }
+
 }
+
